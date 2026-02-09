@@ -1,0 +1,355 @@
+// This is your Prisma schema file
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// =====================
+// USER MANAGEMENT
+// =====================
+
+model User {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  email             String   @unique
+  password          String
+  fullName          String
+  role              String   @default("TEAM_MEMBER")
+  isActive          Boolean  @default(false)
+  profileImage      String?
+  refreshToken      String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  deletedAt         DateTime?
+  
+  // Relations
+  teamMemberships   TeamMember[]
+  groupMemberships  GroupMember[]
+  assignedTasks     Task[]       @relation("AssignedTasks")
+  createdTasks      Task[]       @relation("CreatedTasks")
+  taskComments      TaskComment[]
+  attendanceRecords Attendance[]
+  sentMessages      Message[]    @relation("SentMessages")
+  chatRoomMembers   ChatRoomMember[]
+  notifications     Notification[]
+  documents         Document[]
+  auditLogs         AuditLog[]
+  leadingTeams      Team[]       @relation("TeamLeader")
+  managingProjects  Project[]    @relation("ProjectManager")
+  
+  @@map("users")
+}
+
+// =====================
+// TEAMS & GROUPS
+// =====================
+
+model Team {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  leaderId    String?  @db.ObjectId
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  // Relations
+  leader      User?         @relation("TeamLeader", fields: [leaderId], references: [id])
+  members     TeamMember[]
+  projects    Project[]
+  tasks       Task[]
+  
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  teamId    String   @db.ObjectId
+  userId    String   @db.ObjectId
+  
+  joinedAt  DateTime @default(now())
+  
+  // Relations
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([teamId, userId])
+  @@map("team_members")
+}
+
+model Group {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  // Relations
+  members     GroupMember[]
+  projects    Project[]
+  
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  groupId   String   @db.ObjectId
+  userId    String   @db.ObjectId
+  
+  joinedAt  DateTime @default(now())
+  
+  // Relations
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+// =====================
+// PROJECTS
+// =====================
+
+model Project {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  description   String?
+  teamId        String?  @db.ObjectId
+  groupId       String?  @db.ObjectId
+  managerId     String?  @db.ObjectId
+  startDate     DateTime?
+  endDate       DateTime?
+  status        String   @default("ACTIVE")
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+  
+  // Relations
+  team          Team?    @relation(fields: [teamId], references: [id])
+  group         Group?   @relation(fields: [groupId], references: [id])
+  manager       User?    @relation("ProjectManager", fields: [managerId], references: [id])
+  tasks         Task[]
+  
+  @@map("projects")
+}
+
+// =====================
+// TASKS
+// =====================
+
+model Task {
+  id            String       @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  description   String?
+  projectId     String?      @db.ObjectId
+  teamId        String?      @db.ObjectId
+  assignedToId  String?      @db.ObjectId
+  createdById   String       @db.ObjectId
+  status        String       @default("TODO")
+  priority      String       @default("MEDIUM")
+  progress      Int          @default(0)
+  deadline      DateTime?
+  
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
+  
+  // Relations
+  project       Project?     @relation(fields: [projectId], references: [id])
+  team          Team?        @relation(fields: [teamId], references: [id])
+  assignedTo    User?        @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  createdBy     User         @relation("CreatedTasks", fields: [createdById], references: [id])
+  comments      TaskComment[]
+  attachments   TaskAttachment[]
+  
+  @@map("tasks")
+}
+
+model TaskComment {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  taskId      String   @db.ObjectId
+  userId      String   @db.ObjectId
+  content     String
+  progressUpdate Int?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  // Relations
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("task_comments")
+}
+
+model TaskAttachment {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  taskId      String   @db.ObjectId
+  fileName    String
+  fileUrl     String
+  fileSize    Int
+  mimeType    String
+  
+  uploadedAt  DateTime @default(now())
+  
+  // Relations
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  
+  @@map("task_attachments")
+}
+
+// =====================
+// ATTENDANCE
+// =====================
+
+model Attendance {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String           @db.ObjectId
+  date        DateTime
+  checkIn     DateTime?
+  checkOut    DateTime?
+  status      String           @default("PRESENT")
+  notes       String?
+  isOverride  Boolean          @default(false)
+  overrideBy  String?          @db.ObjectId
+  
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  // Relations
+  user        User             @relation(fields: [userId], references: [id])
+  
+  @@unique([userId, date])
+  @@map("attendance")
+}
+
+// =====================
+// CHAT SYSTEM
+// =====================
+
+model ChatRoom {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String?
+  isGroup     Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  members     ChatRoomMember[]
+  messages    Message[]
+  
+  @@map("chat_rooms")
+}
+
+model ChatRoomMember {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatRoomId  String   @db.ObjectId
+  userId      String   @db.ObjectId
+  
+  joinedAt    DateTime @default(now())
+  
+  // Relations
+  chatRoom    ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([chatRoomId, userId])
+  @@map("chat_room_members")
+}
+
+model Message {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  chatRoomId  String   @db.ObjectId
+  senderId    String   @db.ObjectId
+  content     String
+  fileUrl     String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  // Relations
+  chatRoom    ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  sender      User     @relation("SentMessages", fields: [senderId], references: [id])
+  
+  @@map("messages")
+}
+
+// =====================
+// NOTIFICATIONS
+// =====================
+
+model Notification {
+  id          String           @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String           @db.ObjectId
+  type        String
+  title       String
+  message     String
+  isRead      Boolean          @default(false)
+  link        String?
+  
+  createdAt   DateTime         @default(now())
+  
+  // Relations
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}
+
+// =====================
+// DOCUMENTS
+// =====================
+
+model Document {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  fileUrl     String
+  fileSize    Int
+  mimeType    String
+  category    String
+  uploadedById String  @db.ObjectId
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  
+  // Relations
+  uploadedBy  User     @relation(fields: [uploadedById], references: [id])
+  
+  @@map("documents")
+}
+
+// =====================
+// AUDIT LOGS
+// =====================
+
+model AuditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @db.ObjectId
+  action      String
+  entity      String
+  entityId    String   @db.ObjectId
+  oldValue    String?
+  newValue    String?
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now())
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}
